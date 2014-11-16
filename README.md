@@ -4,7 +4,7 @@ Advanced Computer Network project
 * NETID: rxw130330
 * UTDID: 2021172972
 
-## Distance Vector Multicast Routing Protocol
+### Distance Vector Multicast Routing Protocol
 * All commands in this project are Perl script. They are self-explanatory which do not need compilation process. Just simply execute them.
 * Just a caveat that make sure the command path is correct so as not to get mixed up with same-name system command.(like host, use ./host)
 * Since perl is not a compile language and there're lots of system calls in opening/closing files, reading/writing sync issue happens occasionally. It sometimes cause messages and data to be lost, especially on a system where CPU load is high. Thus in order to have a perfect simulation, I recommend running it against server peak time.
