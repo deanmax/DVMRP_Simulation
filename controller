@@ -1,0 +1,210 @@
+#!/usr/bin/perl
+#---------------------------------
+# CS6390 Proj: Controller process
+#---------------------------------
+# Author: Ruiyu Wang
+# UTD-ID: 2021172972
+# EMAIL: rxw130330@utdallas.edu
+#-------------------------------
+use strict;
+
+my $LOG_FOLDER = "log";
+my $start_time = time();
+my $check_time = $start_time;
+
+# Arguments processing
+my ( @hosts, @routers, @lans ); # store arguments for each type of processes
+my $argu_flag = 0;
+for( my $i = 0 ; $i < @ARGV; $i++ ) {
+    if ( $ARGV[$i] =~ /host/ ) {
+        $argu_flag = 1;
+        next;
+    } elsif ( $ARGV[$i] =~ /router/ ) {
+        $argu_flag = 2;
+        next;
+    } elsif ( $ARGV[$i] =~ /lan/ ) {
+        $argu_flag = 3;
+        next;
+    }
+
+    if ( $argu_flag == 1 ) {
+        push @hosts, $ARGV[$i];
+    } elsif ( $argu_flag == 2 ) {
+        push @routers, $ARGV[$i];
+    } elsif ( $argu_flag == 3 ) {
+        push @lans, $ARGV[$i];
+    }
+}
+
+# Validate Lan file existance
+sleep 2; # To make sure all lan files has been created by router process
+foreach my $lan_id (@lans) {
+    exit 2 if(!chkLAN($lan_id));
+}
+
+#-------------------------------------
+#     Things actually happen here
+#-------------------------------------
+# Main Loop
+# Process lifecycle: 100 seconds
+# Check every 1 second
+#
+while( time() - $start_time <= 100 ) {
+    if (time() - $check_time >= 1) {
+
+        # Check each houtX file, do corresponding coping and appending
+        foreach my $host_id (@hosts) {
+            chkHOSTMsg($host_id, $check_time);
+        }
+
+        # Check each routX file, do corresponding coping and appending
+        foreach my $router_id (@routers) {
+            open(FH_ROUTE, $LOG_FOLDER."/rout".$router_id)
+              or die "Can't open ".$LOG_FOLDER."/rout".$router_id;
+            my @content = <FH_ROUTE>;
+            close FH_ROUTE;
+
+            chkDVMsg($router_id, $check_time, \@content);
+            chkDATAMsg($router_id, $check_time, \@content);
+            chkNMRMsg($router_id, $check_time, \@content);
+        }
+
+        $check_time = time();
+    }
+}
+
+
+###############
+# Subroutines #
+###############
+sub chkDVMsg() {
+    my $r_id = $_[0];
+    my $time = $_[1];
+    my @content = @{$_[2]};
+
+    foreach my $line (@content) {
+        # Remove header
+        next if $line =~ /^Timestamp/i;
+        next if $line =~ /^\-/;
+        next if $line =~ /^\s*$/;
+        chomp $line;
+
+        my @arr = split(" ", $line);
+        next if $time - $arr[0] > 2; # Stale message
+
+        my $chk_flag = system("grep '$line' ".$LOG_FOLDER."/lan".$arr[2]." >/dev/null");
+        next unless $chk_flag; # if same line already in lan file, just don't bother add it again
+
+        if ($arr[1] eq 'DV') {
+            open(FH_LAN, ">>".$LOG_FOLDER."/lan".$arr[2])
+              or die "Can't open ".$LOG_FOLDER."/lan".$arr[2]." for writing!";
+            print FH_LAN $line."\n";
+            close FH_LAN;
+        }
+    }
+}
+
+sub chkDATAMsg() {
+    my $r_id = $_[0];
+    my $time = $_[1];
+    my @content = @{$_[2]};
+
+    foreach my $line (@content) {
+        # Remove header
+        next if $line =~ /^Timestamp/i;
+        next if $line =~ /^\-/;
+        next if $line =~ /^\s*$/;
+        chomp $line;
+
+        my @arr = split(" ", $line);
+        next if $time - $arr[0] > 3; # Stale message
+
+        my $chk_flag = system("grep '$line' ".$LOG_FOLDER."/lan".$arr[2]." >/dev/null");
+        next unless $chk_flag; # if same line already in lan file, just don't bother add it again
+
+        if ($arr[1] =~ /^data/i) {
+            open(FH_LAN, ">>".$LOG_FOLDER."/lan".$arr[2])
+              or die "Can't open ".$LOG_FOLDER."/lan".$arr[2]." for writing!";
+            print FH_LAN $line."\n";
+            close FH_LAN;
+        }
+    }
+}
+
+sub chkNMRMsg() {
+    my $r_id = $_[0];
+    my $time = $_[1];
+    my @content = @{$_[2]};
+
+    foreach my $line (@content) {
+        # Remove header
+        next if $line =~ /^Timestamp/i;
+        next if $line =~ /^\-/;
+        next if $line =~ /^\s*$/;
+        chomp $line;
+
+        my @arr = split(" ", $line);
+        next if $time - $arr[0] > 2; # Stale message
+
+        my $chk_flag = system("grep '$line' ".$LOG_FOLDER."/lan".$arr[2]." >/dev/null");
+        next unless $chk_flag; # if same line already in lan file, just don't bother add it again
+
+        if ($arr[1] eq 'NMR') {
+            open(FH_LAN, ">>".$LOG_FOLDER."/lan".$arr[2])
+              or die "Can't open ".$LOG_FOLDER."/lan".$arr[2]." for writing!";
+            print FH_LAN $line."\n";
+            close FH_LAN;
+        }
+    }
+}
+
+sub chkHOSTMsg() {
+    my $h_id = $_[0];
+    my $time = $_[1];
+
+    next if ! -e $LOG_FOLDER."/hout".$h_id;
+
+    open(FH_HOST, $LOG_FOLDER."/hout".$h_id)
+      or die "Can't open ".$LOG_FOLDER."/hout".$h_id;
+    my @content = <FH_HOST>;
+    close FH_HOST;
+    foreach my $line (@content) {
+        # Remove header
+        next if $line =~ /^Timestamp/i;
+        next if $line =~ /^\-/;
+        next if $line =~ /^\s*$/;
+        chomp $line;
+
+        my @arr = split(" ", $line);
+        next if $time - $arr[0] > 1; # Stale message
+
+        my $chk_flag = system("grep '$line' ".$LOG_FOLDER."/lan".$arr[2]." >/dev/null");
+        next unless $chk_flag; # if same line already in lan file, just don't bother add it again
+
+        if ($arr[1] eq 'receiver' || $arr[1] =~ /^data/i) {
+            open(FH_LAN, ">>".$LOG_FOLDER."/lan".$arr[2])
+              or die "Can't open ".$LOG_FOLDER."/lan".$arr[2]." for writing!";
+            print FH_LAN $line."\n";
+            close FH_LAN;
+        }
+    }
+}
+
+#################################
+# Check if given lan file exists
+#
+# params
+#   1. lan id
+# Return
+#   1 if lan file exists
+#   0 if lan file doesn't exist
+#################################
+sub chkLAN() {
+    my $lan_id = $_[0];
+
+    if (! -e $LOG_FOLDER."/lan".$lan_id) {
+        print STDERR "Lan file ".$LOG_FOLDER."/lan".$lan_id." can't be found!\n";
+        return 0;
+    }
+    return 1;
+}
